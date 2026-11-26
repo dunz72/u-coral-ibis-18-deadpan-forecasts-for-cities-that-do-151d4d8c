@@ -1,71 +1,63 @@
-"""Deadpan Forecasts for Cities That Do Not Exist entry.
+#!/usr/bin/env python3
+"""Copy the deadpan forecast from entry.txt to $MAKEFUN_OUTPUT_DIR/entry.txt.
 
-The single original forecast line lives in entry.txt next to this
-file. This script reads it, checks it fits the sealed gate (1-160
-characters, valid UTF-8, exactly one line, not only whitespace),
-then writes an exact byte copy to $MAKEFUN_OUTPUT_DIR/entry.txt,
-falling back to ./output/entry.txt when that variable is not set.
-After writing, the copy is read back and compared by SHA-256 so a
-partial write can never pass silently. Stdlib only.
+Stdlib only: the grader image has no third-party libraries, so this
+program imports nothing beyond the standard library.
+
+The copy is verified byte-identical (SHA-256) before exiting, and the
+text is checked against the competition gate: UTF-8, 1 to 160
+characters, not only whitespace.
 """
 
 import hashlib
 import os
+import sys
 
 
-def source_path():
-    folder = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(folder, "entry.txt")
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
-def read_source(path):
-    with open(path, "rb") as handle:
-        return handle.read()
+def load_entry(src_path: str) -> tuple[str, bytes]:
+    with open(src_path, "rb") as f:
+        data = f.read()
+    return data.decode("utf-8"), data
 
 
-def decode_forecast(raw):
-    return raw.decode("utf-8")
+def main() -> int:
+    here = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(here, "entry.txt")
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    dst_path = os.path.join(out_dir, "entry.txt")
 
+    text, data = load_entry(src_path)
+    if not text.strip():
+        print("error: entry.txt is empty or whitespace only", file=sys.stderr)
+        return 1
+    if not 1 <= len(text) <= 160:
+        print(f"error: entry text is {len(text)} characters, must be 1-160",
+              file=sys.stderr)
+        return 1
+    if text != text.rstrip("\n") or "\n" in text.rstrip("\n"):
+        print("error: entry.txt must be a single line with no trailing newline",
+              file=sys.stderr)
+        return 1
 
-def check_forecast(text):
-    cleaned = text.strip()
-    if not cleaned:
-        raise ValueError("entry must not be empty or only whitespace")
-    if len(cleaned) > 160:
-        raise ValueError(
-            f"entry must be at most 160 characters, got {len(cleaned)}"
-        )
-    if text != cleaned:
-        raise ValueError("entry.txt must hold exactly one line")
-    if not any(ch.isdigit() for ch in cleaned):
-        raise ValueError("entry must include a concrete number or figure")
-    return cleaned
+    os.makedirs(out_dir, exist_ok=True)
+    with open(dst_path, "wb") as f:
+        f.write(data)
 
+    with open(dst_path, "rb") as f:
+        copied = f.read()
+    if copied != data:
+        print("error: copied entry.txt does not match the source",
+              file=sys.stderr)
+        return 1
 
-def output_folder():
-    return os.environ.get("MAKEFUN_OUTPUT_DIR", "./output")
-
-
-def store_copy(raw, directory):
-    os.makedirs(directory, exist_ok=True)
-    target = os.path.join(directory, "entry.txt")
-    with open(target, "wb") as handle:
-        handle.write(raw)
-    with open(target, "rb") as handle:
-        stored = handle.read()
-    if hashlib.sha256(stored).hexdigest() != hashlib.sha256(raw).hexdigest():
-        raise ValueError("output is not byte-identical to entry.txt")
-    return target
-
-
-def main():
-    raw = read_source(source_path())
-    text = check_forecast(decode_forecast(raw))
-    target = store_copy(raw, output_folder())
-    digest = hashlib.sha256(raw).hexdigest()
-    print(f"wrote {len(raw)} bytes ({len(text)} chars) to {target}")
-    print(f"sha256: {digest}")
+    print(f"copied entry.txt ({len(data)} bytes, "
+          f"sha256 {sha256_hex(data)}) to {dst_path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
